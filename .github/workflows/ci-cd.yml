@@ -59,11 +59,13 @@ jobs:
 
       - name: Copy images to remote
         run: |
+          # 1. Créer le dossier k8s sur le remote EN PREMIER
           ssh -i ~/.ssh/id_ed25519 \
-            -o StrictHostKeyChecking=no \
-            -o UpdateHostKeys=no \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ~/k8s"
+           -o StrictHostKeyChecking=no \
+           -o UpdateHostKeys=no \
+           ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ~/k8s"
 
+           # 2. Copier les images
           scp -i ~/.ssh/id_ed25519 \
             -o StrictHostKeyChecking=no \
             -o UpdateHostKeys=no \
@@ -76,12 +78,12 @@ jobs:
             product-service.tar.gz \
             ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/
 
+          # 3. Copier k8s/ après que le dossier existe
           scp -i ~/.ssh/id_ed25519 \
             -o StrictHostKeyChecking=no \
             -o UpdateHostKeys=no \
             -r k8s/ \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/k8s/
-
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/
 
       - name: Deploy on remote cluster
         run: |
