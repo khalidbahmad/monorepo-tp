@@ -63,7 +63,8 @@ jobs:
           ssh -i ~/.ssh/id_ed25519 \
            -o StrictHostKeyChecking=no \
            -o UpdateHostKeys=no \
-           ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ~/k8s"
+           ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ~/k8s" \
+           "mkdir -p /teamspace/studios/this_studio/k8s"
 
            # 2. Copier les images
           scp -i ~/.ssh/id_ed25519 \
@@ -87,18 +88,31 @@ jobs:
 
       - name: Deploy on remote cluster
         run: |
-          ssh ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'ENDSSH'
-            # Charger les images dans Kind
-            docker load < ~/user-service.tar.gz
-            docker load < ~/product-service.tar.gz
-            kind load docker-image user-service:${{ github.sha }}
-            kind load docker-image product-service:${{ github.sha }}
+          ssh -i ~/.ssh/id_ed25519 \
+            -o StrictHostKeyChecking=no \
+            -o UpdateHostKeys=no \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'ENDSSH'
 
-            # Mettre à jour le tag dans les manifestes et appliquer
-            sed -i "s|user-service:.*|user-service:${{ github.sha }}|g" ~/k8s/user-service-deployment.yaml
-            sed -i "s|product-service:.*|product-service:${{ github.sha }}|g" ~/k8s/product-service-deployment.yaml
+          export PATH=$PATH:/home/zeus/.local/bin:/usr/local/bin
+          WORKDIR="/teamspace/studios/this_studio"
 
-            kubectl apply -f ~/k8s/
-            kubectl rollout status deployment/user-service
-            kubectl rollout status deployment/product-service
+          # Charger les images Docker
+          docker load < $WORKDIR/user-service.tar.gz
+          docker load < $WORKDIR/product-service.tar.gz
+
+          # Charger dans Kind
+          kind load docker-image user-service:${{ github.sha }}
+          kind load docker-image product-service:${{ github.sha }}
+
+          # Mettre à jour les manifestes
+          sed -i "s|user-service:.*|user-service:${{ github.sha }}|g" \
+            $WORKDIR/k8s/user-service-deployment.yaml
+          sed -i "s|product-service:.*|product-service:${{ github.sha }}|g" \
+            $WORKDIR/k8s/product-service-deployment.yaml
+
+          # Déployer
+          kubectl apply -f $WORKDIR/k8s/
+          kubectl rollout status deployment/user-service
+          kubectl rollout status deployment/product-service
+
           ENDSSH
