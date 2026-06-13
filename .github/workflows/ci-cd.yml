@@ -53,15 +53,35 @@ jobs:
       - name: Configure SSH
         run: |
           mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H ${{ secrets.SSH_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
 
       - name: Copy images to remote
         run: |
-          scp user-service.tar.gz ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/
-          scp product-service.tar.gz ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/
-          scp -r k8s/ ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/k8s/
+          ssh -i ~/.ssh/id_ed25519 \
+            -o StrictHostKeyChecking=no \
+            -o UpdateHostKeys=no \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ~/k8s"
+
+          scp -i ~/.ssh/id_ed25519 \
+            -o StrictHostKeyChecking=no \
+            -o UpdateHostKeys=no \
+            user-service.tar.gz \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/
+
+          scp -i ~/.ssh/id_ed25519 \
+            -o StrictHostKeyChecking=no \
+            -o UpdateHostKeys=no \
+            product-service.tar.gz \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/
+
+          scp -i ~/.ssh/id_ed25519 \
+            -o StrictHostKeyChecking=no \
+            -o UpdateHostKeys=no \
+            -r k8s/ \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/k8s/
+
 
       - name: Deploy on remote cluster
         run: |
