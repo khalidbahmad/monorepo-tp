@@ -5,11 +5,9 @@ on:
     branches: [ main ]
 
 jobs:
-  # ─── 1. Build & test ────────────────────────────────────────────
   build:
     name: Build Docker images
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -35,12 +33,10 @@ jobs:
             user-service.tar.gz
             product-service.tar.gz
 
-  # ─── 2. Deploy via SSH sur Lightning AI ─────────────────────────
   deploy:
     name: Deploy to Lightning AI (Kind)
     runs-on: ubuntu-latest
     needs: build
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -59,60 +55,33 @@ jobs:
 
       - name: Copy images to remote
         run: |
-          # 1. Créer le dossier k8s sur le remote EN PREMIER
-          ssh -i ~/.ssh/id_ed25519 \
-           -o StrictHostKeyChecking=no \
-           -o UpdateHostKeys=no \
-           ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} "mkdir -p ~/k8s" \
-           "mkdir -p /teamspace/studios/this_studio/k8s"
-
-           # 2. Copier les images
           scp -i ~/.ssh/id_ed25519 \
             -o StrictHostKeyChecking=no \
             -o UpdateHostKeys=no \
-            user-service.tar.gz \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/
+            user-service.tar.gz product-service.tar.gz \
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/teamspace/studios/this_studio/
 
-          scp -i ~/.ssh/id_ed25519 \
-            -o StrictHostKeyChecking=no \
-            -o UpdateHostKeys=no \
-            product-service.tar.gz \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/
-
-          # 3. Copier k8s/ après que le dossier existe
           scp -i ~/.ssh/id_ed25519 \
             -o StrictHostKeyChecking=no \
             -o UpdateHostKeys=no \
             -r k8s/ \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:~/
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }}:/teamspace/studios/this_studio/
 
       - name: Deploy on remote cluster
         run: |
           ssh -i ~/.ssh/id_ed25519 \
             -o StrictHostKeyChecking=no \
             -o UpdateHostKeys=no \
-            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << 'ENDSSH'
-
-          export PATH=$PATH:/home/zeus/.local/bin:/usr/local/bin
+            ${{ secrets.SSH_USER }}@${{ secrets.SSH_HOST }} << ENDSSH
+          export PATH=/teamspace/studios/this_studio/.local/bin:\$PATH
           WORKDIR="/teamspace/studios/this_studio"
-
-          # Charger les images Docker
-          docker load < $WORKDIR/user-service.tar.gz
-          docker load < $WORKDIR/product-service.tar.gz
-
-          # Charger dans Kind
-          kind load docker-image user-service:${{ github.sha }}
-          kind load docker-image product-service:${{ github.sha }}
-
-          # Mettre à jour les manifestes
-          sed -i "s|user-service:.*|user-service:${{ github.sha }}|g" \
-            $WORKDIR/k8s/user-service-deployment.yaml
-          sed -i "s|product-service:.*|product-service:${{ github.sha }}|g" \
-            $WORKDIR/k8s/product-service-deployment.yaml
-
-          # Déployer
-          kubectl apply -f $WORKDIR/k8s/
+          docker load < \$WORKDIR/user-service.tar.gz
+          docker load < \$WORKDIR/product-service.tar.gz
+          kind load docker-image user-service:${{ github.sha }} --name tp-cluster
+          kind load docker-image product-service:${{ github.sha }} --name tp-cluster
+          sed -i "s|user-service:.*|user-service:${{ github.sha }}|g" \$WORKDIR/k8s/user-service-deployment.yaml
+          sed -i "s|product-service:.*|product-service:${{ github.sha }}|g" \$WORKDIR/k8s/product-service-deployment.yaml
+          kubectl apply -f \$WORKDIR/k8s/
           kubectl rollout status deployment/user-service
           kubectl rollout status deployment/product-service
-
           ENDSSH
